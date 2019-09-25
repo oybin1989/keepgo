@@ -6,4 +6,4 @@ A dameon which keeps your application service running in background
 Wubin Ouyang
 
 ## License
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE.md](LICENSE.md) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE.md](https://github.com/oybin1989/keepgo/blob/development/README.md) file for details.
