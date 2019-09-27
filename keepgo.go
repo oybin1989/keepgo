@@ -5,9 +5,12 @@ import (
 		"os"
 		"bufio"
 		"regexp"
+		"syscall"
 )
 
 var configFilePath string = "/etc/keepgo.conf"
+
+var magicString string = "oWvXDHYgGT"
 
 var once sync.Once
 
@@ -41,13 +44,9 @@ func (configurator * Configurator) load(configFilePath string) {
 			res := regex.FindStringSubmatch(line)
 			attributes := make(ConfigEntry,0)
 			attributes["name"] = res[1]
-			fmt.Println(res[1])
 			attributes["regex"] = res[2]
-			fmt.Println(res[2])
 			attributes["running"] = res[3]
-			fmt.Println(res[3])
 			attributes["restart"] = res[4]
-			fmt.Println(res[4])
 			configurator.configurationEntries = append(configurator.configurationEntries, attributes)
 			configurator.configurationNum = configurator.configurationNum + 1
 		}
@@ -64,9 +63,39 @@ func getGonfigurator() *Configurator {
 }
 
 func main()  {
-	configurator := getGonfigurator()
-	configurator = getGonfigurator()
-	fmt.Println(*configurator)
+	// configurator := getGonfigurator()
+	// configurator = getGonfigurator()
+	if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
+		//configurator := getGonfigurator()
+		syscall.Setsid()
+		for true {
+		}
+
+		// foreground process
+	} else {
+		var sysproc = &syscall.SysProcAttr{ Noctty:true }
+		attr := os.ProcAttr{
+			Dir: ".",
+			Env: os.Environ(),
+			Files: []*os.File{
+				os.Stdout,
+				os.Stderr,
+			},
+			Sys: sysproc,
+		}
+		args := []string{os.Args[0], magicString}
+		process, err := os.StartProcess(os.Args[0], args, &attr)
+		os.Stdout = os.NewFile(0, os.DevNull)
+		if err == nil {
+			// It is not clear from docs, but Realease actually detaches the process
+			err = process.Release();
+			if err != nil {
+					fmt.Println(err.Error())
+			}
+		} else {
+			fmt.Println(err.Error())
+		}
+	}
 }
 
 
