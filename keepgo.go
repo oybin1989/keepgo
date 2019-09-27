@@ -11,6 +11,7 @@ import (
 		"log/syslog"
 		"io/ioutil"
 		"strconv"
+		"os/exec"
 )
 
 var configFilePath string = "/etc/keepgo.conf"
@@ -29,7 +30,7 @@ type Configurator struct {
 
 var globalConfig Configurator
 
-var configurationRegex string = "^\\s*(\\D\\S*)\\s*\\\"(\\S.*)\\\"\\s*\\\"(\\S.*)\\\"\\s*\\\"(\\S.*)\\\""
+var configurationRegex string = "^\\s*(\\D\\S*)\\s*\\\"(\\S.*)\\\"\\s*\\\"(\\S.*)\\\""
 
 func (configurator * Configurator) load(configFilePath string) {
 	f, err := os.Open(configFilePath)
@@ -50,8 +51,9 @@ func (configurator * Configurator) load(configFilePath string) {
 			attributes := make(ConfigEntry,0)
 			attributes["name"] = res[1]
 			attributes["regex"] = res[2]
-			attributes["running"] = res[3]
-			attributes["restart"] = res[4]
+			attributes["restart"] = res[3]
+			attributes["pid"] = "0"
+			attributes["touched"] = "0"
 			configurator.configurationEntries = append(configurator.configurationEntries, attributes)
 			configurator.configurationNum = configurator.configurationNum + 1
 		}
@@ -70,7 +72,9 @@ func getGonfigurator() *Configurator {
 func main()  {
 	// daemon process
 	if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
+		// create a new session
 		syscall.Setsid()
+		// set up syslog
 		logwriter, e := syslog.New(syslog.LOG_NOTICE, "keepgo")
 		if e == nil {
 			log.SetOutput(logwriter)
@@ -78,40 +82,56 @@ func main()  {
 		log.Printf("keepgo starts at %s", time.Now().Format(time.UnixDate))
 
 		configurator := getGonfigurator()
+
 		for true {
-			files, err := ioutil.ReadDir("/proc")
+			for _, config := range configurator.configurationEntries{
+				config["pid"] = "0"
+				config["touched"] = "0"
+			}
+			processes, err := ioutil.ReadDir("/proc")
 			if err != nil {
 				log.Printf("%w", err)
 			}
-			for _, file := range files {
-				if _, err := strconv.Atoi(file.Name()); err == nil {
-					f, err := os.Open("/proc/" + file.Name() + "/cmdline")
+
+			for _, pid := range processes {
+				// iterator all processes
+				if _, err := strconv.Atoi(pid.Name()); err == nil {
+					f, err := os.Open("/proc/" + pid.Name() + "/cmdline")
 					if err != nil {
 						log.Printf("Failed to read the process cmd %w\n", err)
 					}
-					defer f.Close()
 					commandLine, err := ioutil.ReadAll(f)
+					f.Close()
 					if err != nil {
 						log.Printf("Failed to read the process cmd %w\n", err)
 					}
 					commandLineStr := string(commandLine)
 					if len(commandLineStr) > 0 {
-						log.Print(commandLineStr)
+						// check if jobs configured are running. pid = process id, touched = has been matched before
+						for _, config := range configurator.configurationEntries{
+							if match, _ := regexp.MatchString(config["regex"], commandLineStr); match && config["touched"] == "0" {
+								config["pid"] = pid.Name()
+								config["touched"] = "1"
+							}
+						}
 					}
-					f.Close()
 				}
 			}
-			log.Printf("keepgo ticks at %s", time.Now().Format(time.UnixDate))
-			log.Printf("%p", configurator)
-			// procAttrProcess := new(os.ProcAttr)
-			// procAttrProcess.Files = []*os.File{nil, nil, nil}
-			// _, err = os.StartProcess("/usr/bin/less", []string{"usr/bin/less", "/etc/keepgo.conf"}, procAttrProcess)
-			// if err != nil {
-			// 	log.Printf("error %w", err)
-			// }
+			// for those are not running, do start
+			for _, config := range configurator.configurationEntries{
+				log.Print(config["pid"])
+				if config["pid"] != "0" {
+				} else {
+					
+					cmd := exec.Command("/usr/bin/bash", "-c", config["restart"])
+					if err := cmd.Start(); err != nil {
+						log.Printf("job %s fails to restart", config["name"])
+						log.Printf("job %s fails due to %w", err)
+					}
+				}
+			}
 			time.Sleep(3*time.Second)
 		}
-
 
 	// foreground process
 	} else {
