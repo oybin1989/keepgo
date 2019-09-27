@@ -122,7 +122,6 @@ func main()  {
         log.Print(config["pid"])
         if config["pid"] != "0" {
         } else {
-
           cmd := exec.Command("/usr/bin/bash", "-c", config["restart"])
           if err := cmd.Start(); err != nil {
             log.Printf("job %s fails to restart", config["name"])
