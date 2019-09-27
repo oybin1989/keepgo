@@ -1,14 +1,16 @@
 package main
 import (
-		"fmt"
-		"sync"
-		"os"
-		"bufio"
-		"regexp"
-		"syscall"
-		"time"
-		"log"
+    "fmt"
+    "sync"
+    "os"
+    "bufio"
+    "regexp"
+    "syscall"
+    "time"
+    "log"
 		"log/syslog"
+		"io/ioutil"
+		"strconv"
 )
 
 var configFilePath string = "/etc/keepgo.conf"
@@ -66,8 +68,8 @@ func getGonfigurator() *Configurator {
 }
 
 func main()  {
+	// daemon process
 	if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
-		//configurator := getGonfigurator()
 		syscall.Setsid()
 		logwriter, e := syslog.New(syslog.LOG_NOTICE, "keepgo")
 		if e == nil {
@@ -77,24 +79,54 @@ func main()  {
 
 		configurator := getGonfigurator()
 		for true {
-			time.Sleep(10*time.Second)
+			files, err := ioutil.ReadDir("/proc")
+			if err != nil {
+				log.Printf("%w", err)
+			}
+			for _, file := range files {
+				if _, err := strconv.Atoi(file.Name()); err == nil {
+					f, err := os.Open("/proc/" + file.Name() + "/cmdline")
+					if err != nil {
+						log.Printf("Failed to read the process cmd %w\n", err)
+					}
+					defer f.Close()
+					commandLine, err := ioutil.ReadAll(f)
+					if err != nil {
+						log.Printf("Failed to read the process cmd %w\n", err)
+					}
+					commandLineStr := string(commandLine)
+					if len(commandLineStr) > 0 {
+						log.Print(commandLineStr)
+					}
+					f.Close()
+				}
+			}
 			log.Printf("keepgo ticks at %s", time.Now().Format(time.UnixDate))
 			log.Printf("%p", configurator)
+			// procAttrProcess := new(os.ProcAttr)
+			// procAttrProcess.Files = []*os.File{nil, nil, nil}
+			// _, err = os.StartProcess("/usr/bin/less", []string{"usr/bin/less", "/etc/keepgo.conf"}, procAttrProcess)
+			// if err != nil {
+			// 	log.Printf("error %w", err)
+			// }
+			time.Sleep(3*time.Second)
 		}
 
 
-		// foreground process
+	// foreground process
 	} else {
 		var sysproc = &syscall.SysProcAttr{ Noctty:true }
 		attr := os.ProcAttr{
 			Dir: ".",
 			Env: os.Environ(),
 			Files: []*os.File{
-				os.Stdout,
-				os.Stderr,
+				os.Stdin,// stdin
+				os.Stdout,// stdout
+				os.Stderr,// stderr
 			},
 			Sys: sysproc,
 		}
+		// no native fork support exists in go, use magic string to distinguish daemon process
 		args := []string{os.Args[0], magicString}
 		process, err := os.StartProcess(os.Args[0], args, &attr)
 		if err == nil {
