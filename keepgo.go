@@ -6,6 +6,9 @@ import (
 		"bufio"
 		"regexp"
 		"syscall"
+		"time"
+		"log"
+		"log/syslog"
 )
 
 var configFilePath string = "/etc/keepgo.conf"
@@ -63,13 +66,22 @@ func getGonfigurator() *Configurator {
 }
 
 func main()  {
-	// configurator := getGonfigurator()
-	// configurator = getGonfigurator()
 	if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
 		//configurator := getGonfigurator()
 		syscall.Setsid()
-		for true {
+		logwriter, e := syslog.New(syslog.LOG_NOTICE, "keepgo")
+		if e == nil {
+			log.SetOutput(logwriter)
 		}
+		log.Printf("keepgo starts at %s", time.Now().Format(time.UnixDate))
+
+		configurator := getGonfigurator()
+		for true {
+			time.Sleep(10*time.Second)
+			log.Printf("keepgo ticks at %s", time.Now().Format(time.UnixDate))
+			log.Printf("%p", configurator)
+		}
+
 
 		// foreground process
 	} else {
@@ -85,7 +97,6 @@ func main()  {
 		}
 		args := []string{os.Args[0], magicString}
 		process, err := os.StartProcess(os.Args[0], args, &attr)
-		os.Stdout = os.NewFile(0, os.DevNull)
 		if err == nil {
 			// It is not clear from docs, but Realease actually detaches the process
 			err = process.Release();
