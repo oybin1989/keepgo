@@ -123,8 +123,9 @@ func main()  {
         if config["pid"] != "0" {
         } else {
           cmd := exec.Command("/usr/bin/bash", "-c", config["restart"], "\"")
-          cmd.Stdout = os.Stdout
-          cmd.Stderr = os.Stderr
+          cmd.SysProcAttr = &syscall.SysProcAttr{
+            Pdeathsig: syscall.SIGTERM,
+        }
           if err := cmd.Start(); err != nil {
             log.Printf("job %s fails to restart", config["name"])
             log.Printf("job %s fails due to %w", err)
