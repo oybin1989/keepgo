@@ -24,7 +24,6 @@ type ConfigEntry map[string]string
 
 type Configurator struct {
   configurationEntries []ConfigEntry
-  configurationNum int
   configurationRegex string
 }
 
@@ -41,7 +40,6 @@ func (configurator * Configurator) load(configFilePath string) {
   defer f.Close()
 
   configurator.configurationRegex = configurationRegex
-  configurator.configurationNum = 0
   scanner := bufio.NewScanner(f)
   for scanner.Scan() {
     line := scanner.Text()
@@ -55,7 +53,6 @@ func (configurator * Configurator) load(configFilePath string) {
       attributes["pid"] = "0"
       attributes["touched"] = "0"
       configurator.configurationEntries = append(configurator.configurationEntries, attributes)
-      configurator.configurationNum = configurator.configurationNum + 1
     }
   }
 }
@@ -72,11 +69,11 @@ func getGonfigurator() *Configurator {
 func main()  {
   // daemon process
   if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
-    // create a new session
     logwriter, e := syslog.New(syslog.LOG_NOTICE, "keepgo")
     if e == nil {
       log.SetOutput(logwriter)
     }
+    // create a new session
     syscall.Setsid()
 
     // set up syslog
@@ -89,23 +86,14 @@ func main()  {
         config["pid"] = "0"
         config["touched"] = "0"
       }
-      processes, err := ioutil.ReadDir("/proc")
-      if err != nil {
-        log.Printf("%w", err)
-      }
+      processes, _ := ioutil.ReadDir("/proc")
 
       for _, pid := range processes {
         // iterator all processes
         if _, err := strconv.Atoi(pid.Name()); err == nil {
-          f, err := os.Open("/proc/" + pid.Name() + "/cmdline")
-          if err != nil {
-            log.Printf("Failed to read the process cmd %w\n", err)
-          }
-          commandLine, err := ioutil.ReadAll(f)
+          f, _ := os.Open("/proc/" + pid.Name() + "/cmdline")
+          commandLine, _ := ioutil.ReadAll(f)
           f.Close()
-          if err != nil {
-            log.Printf("Failed to read the process cmd %w\n", err)
-          }
           commandLineStr := string(commandLine)
           if len(commandLineStr) > 0 {
             // check if jobs configured are running. pid = process id, touched = has been matched before
@@ -120,23 +108,21 @@ func main()  {
       }
       // for those are not running, do start
       for _, config := range configurator.configurationEntries{
-        log.Print(config["pid"])
         if config["pid"] != "0" {
         } else {
           go func() {
-          cmd := exec.Command("/usr/bin/bash", "-c", config["restart"], "\"")
-          cmd.SysProcAttr = &syscall.SysProcAttr{
-          }
-          if err := cmd.Start(); err != nil {
-            log.Printf("job %s fails to restart", config["name"])
-            log.Printf("job %s fails due to %w", err)
-          } else
-          {
-            log.Printf("restart job %s", config["name"])
-            cmd.Wait()
-            log.Printf("job %s finishes.", config["name"])
-          }
-        }()
+            cmd := exec.Command("/usr/bin/bash", "-c", config["restart"], "\"")
+            cmd.SysProcAttr = &syscall.SysProcAttr{}
+            if err := cmd.Start(); err != nil {
+              log.Printf("job %s fails to restart", config["name"])
+              log.Printf("job %s fails due to %w", err)
+            } else
+            {
+              log.Printf("restart job %s", config["name"])
+              cmd.Wait()
+              log.Printf("job %s finishes.", config["name"])
+            }
+          }()
         }
       }
       time.Sleep(3*time.Second)
@@ -144,7 +130,9 @@ func main()  {
 
   // foreground process
   } else {
-    var sysproc = &syscall.SysProcAttr{ Noctty:true }
+
+
+    var sysproc = &syscall.SysProcAttr{ Noctty: true }
     attr := os.ProcAttr{
       Dir: ".",
       Env: os.Environ(),
