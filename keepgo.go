@@ -73,12 +73,13 @@ func main()  {
   // daemon process
   if len(os.Args) > 1 && os.Args[len(os.Args) - 1] == magicString {
     // create a new session
-    syscall.Setsid()
-    // set up syslog
     logwriter, e := syslog.New(syslog.LOG_NOTICE, "keepgo")
     if e == nil {
       log.SetOutput(logwriter)
     }
+    syscall.Setsid()
+
+    // set up syslog
     log.Printf("keepgo starts at %s", time.Now().Format(time.UnixDate))
 
     configurator := getGonfigurator()
@@ -122,17 +123,20 @@ func main()  {
         log.Print(config["pid"])
         if config["pid"] != "0" {
         } else {
+          go func() {
           cmd := exec.Command("/usr/bin/bash", "-c", config["restart"], "\"")
           cmd.SysProcAttr = &syscall.SysProcAttr{
-            Pdeathsig: syscall.SIGTERM,
-        }
+          }
           if err := cmd.Start(); err != nil {
             log.Printf("job %s fails to restart", config["name"])
             log.Printf("job %s fails due to %w", err)
+          } else
+          {
+            log.Printf("restart job %s", config["name"])
+            cmd.Wait()
+            log.Printf("job %s finishes.", config["name"])
           }
-          if err := cmd.Wait(); err != nil {
-            log.Printf("Cmd returned error: %v", err)
-        }
+        }()
         }
       }
       time.Sleep(3*time.Second)
